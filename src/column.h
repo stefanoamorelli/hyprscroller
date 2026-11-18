@@ -111,6 +111,8 @@ public:
     void fit_size(FitSize fitsize, const Vector2D &gap_x, double gap);
     void cycle_size_active_window(int step, const Vector2D &gap_x, double gap);
     void size_active_window(StandardSize height, const Vector2D &gap_x, double gap);
+    // Give every window in the column 1/divisor of maxh (auto-fit on vertical screens)
+    void fit_windows(StandardSize height, double maxh, size_t divisor, const Vector2D &gap_x, double gap);
     void resize_active_window(const Vector2D &gap_x, double gap, const Vector2D &delta);
     void selection_toggle();
     void selection_set(PHLWINDOWREF window);

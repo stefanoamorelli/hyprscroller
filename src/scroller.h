@@ -57,6 +57,7 @@ public:
     void fit_size(WORKSPACEID workspace, FitSize);
     void fit_width(WORKSPACEID workspace, FitSize);
     void fit_height(WORKSPACEID workspace, FitSize);
+    void auto_fit_reset(WORKSPACEID workspace);
     void toggle_overview(WORKSPACEID workspace);
 
     void marks_add(const std::string &name);

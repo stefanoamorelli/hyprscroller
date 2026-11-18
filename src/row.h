@@ -71,6 +71,8 @@ public:
     void set_fullscreen_mode_windows(eFullscreenMode mode);
     void set_fullscreen_mode(PHLWINDOW window, eFullscreenMode cur_mode, eFullscreenMode new_mode);
     void fit_size(FitSize fitsize);
+    // Forget that the user sized this workspace by hand and auto-fit it again
+    void auto_fit_reset();
     bool is_overview() const;
     void toggle_overview();
     void update_windows(const Box &oldmax, bool force);
@@ -80,7 +82,17 @@ public:
     void scroll_end(Direction dir);
 
 private:
-    bool move_focus_left(bool focus_wrap); 
+    // Auto-size the columns to fill the row while there are few enough of them
+    // (plugin:scroller:auto_fit_max_columns). Stays out of the way once the user
+    // has sized a column by hand (see manually_sized).
+    void auto_fit();
+    int auto_fit_max_columns() const;
+    // Column mode stacks windows, so auto-fit splits the height there;
+    // row mode puts them side by side, so it splits the width.
+    bool vertical() const { return mode == Mode::Column; }
+    void fit_columns(size_t divisor);
+    void fit_windows(size_t divisor);
+    bool move_focus_left(bool focus_wrap);
     bool move_focus_right(bool focus_wrap);
     void move_focus_begin();
     void move_focus_end();
@@ -101,6 +113,9 @@ private:
     eFullscreenMode preoverview_fsmode;
     int gap;
     Reorder reorder;
+    // Set once the user changes a column width by hand (cyclewidth/setwidth/
+    // fitsize/mouse drag). Disables auto_fit for this workspace until it empties.
+    bool manually_sized;
     Mode mode;
     ModeModifier modifier;
     ListNode<Column *> *pinned;

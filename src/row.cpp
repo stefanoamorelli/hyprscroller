@@ -17,12 +17,20 @@ extern ScrollerSizes scroller_sizes;
 
 Row::Row(WORKSPACEID workspace)
     : workspace(workspace), overview(false),
-      reorder(Reorder::Auto), pinned(nullptr), active(nullptr)
+      reorder(Reorder::Auto), manually_sized(false),
+      pinned(nullptr), active(nullptr)
 {
     post_event("overview");
-    const auto PMONITOR = g_pCompositor->m_lastMonitor.lock();
-    set_mode(scroller_sizes.get_mode(PMONITOR));
+    // The workspace's own monitor, not whichever one happens to be focused:
+    // rows are also built for windows on other monitors (plugin reload, a
+    // window opening on an unfocused screen), and taking m_lastMonitor there
+    // gives them the focused monitor's mode and geometry.
+    const auto PWORKSPACE = g_pCompositor->getWorkspaceByID(workspace);
+    PHLMONITOR PMONITOR = PWORKSPACE != nullptr ? PWORKSPACE->m_monitor.lock() : nullptr;
+    if (PMONITOR == nullptr)
+        PMONITOR = g_pCompositor->m_lastMonitor.lock();
     update_sizes(PMONITOR);
+    set_mode(scroller_sizes.get_mode(PMONITOR));
 }
 
 Row::~Row()
@@ -143,6 +151,7 @@ void Row::add_active_window(PHLWINDOW window)
         active->data()->recalculate_col_geometry(calculate_gap_x(active), gap, true);
         if (modifier.get_focus() == ModeModifier::FOCUS_NOFOCUS && store_active != nullptr)
             active = store_active;
+        auto_fit();
     } else {
         auto focus = modifier.get_focus();
         auto node = active;
@@ -170,6 +179,7 @@ void Row::add_active_window(PHLWINDOW window)
 
         reorder = Reorder::Auto;
         recalculate_row_geometry();
+        auto_fit();
     }
     modifier = store_modifier;
     mode = store_mode;
@@ -218,10 +228,12 @@ bool Row::remove_window(PHLWINDOW window)
                     return false;
                 } else {
                     recalculate_row_geometry();
+                    auto_fit();
                     break;
                 }
             } else {
                 c->data()->recalculate_col_geometry(calculate_gap_x(c), gap, true);
+                auto_fit();
                 break;
             }
         }
@@ -350,6 +362,8 @@ void Row::resize_active_column(int step)
 
     if (mode == Mode::Column) {
         active->data()->cycle_size_active_window(step, calculate_gap_x(active), gap);
+        if (vertical())
+            manually_sized = true;
     } else {
         StandardSize width = active->data()->get_width();
         if (width == StandardSize::Free) {
@@ -365,6 +379,8 @@ void Row::resize_active_column(int step)
             width = scroller_sizes.get_next_column_width(width, step);
         }
         active->data()->update_width(width, max.w);
+        if (!vertical())
+            manually_sized = true;
         reorder = Reorder::Auto;
         recalculate_row_geometry();
     }
@@ -383,8 +399,12 @@ void Row::size_active_column(StandardSize size)
 
     if (mode == Mode::Column) {
         active->data()->size_active_window(size, calculate_gap_x(active), gap);
+        if (vertical())
+            manually_sized = true;
     } else {
         active->data()->update_width(size, max.w);
+        if (!vertical())
+            manually_sized = true;
         reorder = Reorder::Auto;
         recalculate_row_geometry();
     }
@@ -419,6 +439,11 @@ void Row::resize_active_window(const Vector2D &delta)
         return;
     if (overview)
         return;
+
+    // A drag along the axis auto_fit manages means hands off this workspace
+    // from now on; a drag across it doesn't touch anything auto_fit sets.
+    if (vertical() ? delta.y != 0 : delta.x != 0)
+        manually_sized = true;
 
     active->data()->resize_active_window(calculate_gap_x(active), gap, delta);
     recalculate_row_geometry();
@@ -1064,8 +1089,14 @@ void Row::fit_size(FitSize fitsize)
     }
     if (mode == Mode::Column) {
         active->data()->fit_size(fitsize, calculate_gap_x(active), gap);
+        if (vertical())
+            manually_sized = true;
         return;
     }
+    // Explicit width fitting is a manual decision too; don't undo it later.
+    if (!vertical())
+        manually_sized = true;
+
     ListNode<Column *> *from, *to;
     switch (fitsize) {
     case FitSize::Active:
@@ -1486,6 +1517,107 @@ void Row::recalculate_row_geometry()
     }
 
     adjust_columns(active);
+}
+
+int Row::auto_fit_max_columns() const
+{
+    static auto* const *max_cols = (Hyprlang::INT* const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:auto_fit_max_columns")->getDataStaticPtr();
+
+    return **max_cols;
+}
+
+static StandardSize size_for_divisor(size_t divisor)
+{
+    switch (divisor) {
+    case 1: return StandardSize::One;
+    case 2: return StandardSize::OneHalf;
+    case 3: return StandardSize::OneThird;
+    case 4: return StandardSize::OneFourth;
+    case 6: return StandardSize::OneSixth;
+    case 8: return StandardSize::OneEighth;
+    default: return StandardSize::Free;
+    }
+}
+
+// Vertical screens: stack the active column's windows, each 1/divisor of the
+// height, and give the column the full width.
+void Row::fit_windows(size_t divisor)
+{
+    Column *column = active->data();
+
+    column->update_width(StandardSize::One, max.w);
+    column->fit_windows(size_for_divisor(divisor), max.h, divisor, calculate_gap_x(active), gap);
+    adjust_columns(active);
+}
+
+// Give every column 1/divisor of the row, so `divisor` of them fill the screen.
+void Row::fit_columns(size_t divisor)
+{
+    StandardSize target = size_for_divisor(divisor);
+
+    for (auto c = columns.first(); c != nullptr; c = c->next()) {
+        if (target == StandardSize::Free) {
+            c->data()->update_width(StandardSize::Free, max.w / (double)divisor);
+        } else {
+            c->data()->update_width(target, max.w);
+        }
+    }
+
+    adjust_columns(active);
+}
+
+// Explicit user request (scroller:autofitreset): always re-arrange, and forget
+// any manual sizing. Past the auto-fit limit the columns are sized to 1/limit,
+// so that many fill the screen and the rest scroll off.
+void Row::auto_fit_reset()
+{
+    manually_sized = false;
+
+    int max_columns = auto_fit_max_columns();
+    if (max_columns <= 0 || columns.empty())
+        return;
+
+    if (vertical()) {
+        size_t count = active->data()->size();
+        if (count == 0)
+            return;
+        fit_windows(std::min(count, (size_t)max_columns));
+    } else {
+        fit_columns(std::min(columns.size(), (size_t)max_columns));
+    }
+    reorder = Reorder::Auto;
+    recalculate_row_geometry();
+}
+
+void Row::auto_fit()
+{
+    int max_columns = auto_fit_max_columns();
+    if (max_columns <= 0)
+        return;
+
+    // The user has sized something here by hand; their layout wins.
+    if (manually_sized)
+        return;
+
+    if (vertical()) {
+        // Only when everything lives in a single stacked column — more than one
+        // column on a portrait screen means a layout the user built on purpose.
+        if (columns.size() != 1)
+            return;
+
+        size_t count = active->data()->size();
+        if (count == 0 || count > (size_t)max_columns)
+            return;
+
+        fit_windows(count);
+        return;
+    }
+
+    size_t count = columns.size();
+    if (count == 0 || count > (size_t)max_columns)
+        return;
+
+    fit_columns(count);
 }
 
 // Adjust all the columns in the row using 'column' as anchor

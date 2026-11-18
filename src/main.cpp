@@ -46,6 +46,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:center_active_window", Hyprlang::INT{0});
     // 0, 1
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:center_active_column", Hyprlang::INT{0});
+    // 0 (disabled), or positive integer for max columns to auto-fit
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:auto_fit_max_columns", Hyprlang::INT{0});
     // 0, 1
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:scroller:overview_scale_content", Hyprlang::INT{1});
     // a list of values used as standard widths for cyclesize in row mode, and in the cycling order

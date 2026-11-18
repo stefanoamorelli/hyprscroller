@@ -251,6 +251,15 @@ namespace dispatchers {
         else
             return {};
     }
+    SDispatchResult dispatch_autofitreset(std::string arg) {
+        auto workspace = workspace_for_action();
+        if (workspace == -1)
+            return { .success = false, .error = "scroller:autofitreset: invalid workspace" };
+
+        g_ScrollerLayout->auto_fit_reset(workspace);
+
+        return {};
+    }
     SDispatchResult dispatch_fitsize(std::string arg) {
         auto workspace = workspace_for_action();
         if (workspace == -1)
@@ -471,6 +480,7 @@ namespace dispatchers {
         HyprlandAPI::addDispatcherV2(PHANDLE, "scroller:expelwindow", dispatch_expelwindow);
         HyprlandAPI::addDispatcherV2(PHANDLE, "scroller:setmode", dispatch_setmode);
         HyprlandAPI::addDispatcherV2(PHANDLE, "scroller:setmodemodifier", dispatch_setmodemodifier);
+        HyprlandAPI::addDispatcherV2(PHANDLE, "scroller:autofitreset", dispatch_autofitreset);
         HyprlandAPI::addDispatcherV2(PHANDLE, "scroller:fitsize", dispatch_fitsize);
         HyprlandAPI::addDispatcherV2(PHANDLE, "scroller:fitwidth", dispatch_fitwidth);
         HyprlandAPI::addDispatcherV2(PHANDLE, "scroller:fitheight", dispatch_fitheight);

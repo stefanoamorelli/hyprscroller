@@ -979,6 +979,14 @@ void ScrollerLayout::fit_size(WORKSPACEID workspace, FitSize fitsize) {
     s->fit_size(fitsize);
 }
 
+void ScrollerLayout::auto_fit_reset(WORKSPACEID workspace) {
+    auto s = getRowForWorkspace(workspace);
+    if (s == nullptr) {
+        return;
+    }
+    s->auto_fit_reset();
+}
+
 void ScrollerLayout::fit_width(WORKSPACEID workspace, FitSize fitsize) {
     auto s = getRowForWorkspace(workspace);
     if (s == nullptr) {

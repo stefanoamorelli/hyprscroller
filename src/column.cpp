@@ -538,6 +538,20 @@ void Column::size_active_window(StandardSize height, const Vector2D &gap_x, doub
     recalculate_col_geometry(gap_x, gap, true);
 }
 
+void Column::fit_windows(StandardSize height, double maxh, size_t divisor, const Vector2D &gap_x, double gap)
+{
+    reorder = Reorder::Auto;
+    for (auto w = windows.first(); w != nullptr; w = w->next()) {
+        if (height == StandardSize::Free) {
+            w->data()->set_height_free();
+            w->data()->set_geom_h(maxh / (double)divisor);
+        } else {
+            w->data()->update_height(height, maxh);
+        }
+    }
+    recalculate_col_geometry(gap_x, gap, true);
+}
+
 void Column::resize_active_window(const Vector2D &gap_x, double gap, const Vector2D &delta)
 {
     const Box &max = row->get_max();
